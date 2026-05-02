@@ -1,23 +1,34 @@
-import React, { Suspense, useMemo, useLayoutEffect, useEffect, useState, useCallback } from 'react'
+import React, { Suspense, useMemo, useLayoutEffect, useEffect, useState, useCallback, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Stage, useGLTF } from '@react-three/drei'
 import { useStore, METALS } from '../store/useStore'
 import * as THREE from 'three'
 import { UploadCloud } from 'lucide-react'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 function Model({ url, isClean }) {
   const { scene } = useGLTF(url)
   const clonedScene = useMemo(() => scene.clone(), [scene])
+  const prevMaterialsRef = useRef([])
 
-  const heatmapEnabled = useStore(state => state.heatmapEnabled)
+  const heatmapEnabled   = useStore(state => state.heatmapEnabled)
+  const heatmapIntensity = useStore(state => state.heatmapIntensity)
   const comparisonSlider = useStore(state => state.comparisonSlider)
-  const selectedMetal  = useStore(state => state.selectedMetal)
+  const selectedMetal    = useStore(state => state.selectedMetal)
+  const showTopology     = useStore(state => state.showTopology)
 
+  // ── Cleanup: dispose old geometry & materials on unmount or URL change ──
   useEffect(() => {
     return () => {
+      // Dispose all materials we've been tracking
+      prevMaterialsRef.current.forEach(m => {
+        if (m && m.dispose) m.dispose()
+      })
+      prevMaterialsRef.current = []
+
       clonedScene.traverse((child) => {
         if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose()
+          // Do NOT dispose geometry, as it is cached by useGLTF
           if (child.material) {
             if (Array.isArray(child.material)) {
               child.material.forEach(m => m.dispose())
@@ -27,74 +38,126 @@ function Model({ url, isClean }) {
           }
         }
       })
-      useGLTF.preload(url) // ensure cache is cleaned up if we want, or just clear explicitly
-      // actually let's call useGLTF.clear to ensure the cache is purged and memory freed
-      useGLTF.clear(url)
+      // Do NOT clear useGLTF cache, let React Three Fiber handle it
     }
   }, [clonedScene, url])
 
+  // ── Material & visibility update ──
   useLayoutEffect(() => {
     const metalDef = METALS[selectedMetal] || METALS['gold_14k']
 
-    clonedScene.traverse((child) => {
-      if (child.isMesh) {
-        if (!child.geometry.attributes.normal) {
-          child.geometry.computeVertexNormals()
-        }
-
-        if (heatmapEnabled && isClean) {
-          // ── Heatmap mode: Blue(cold) → Green → Red(hot) via Red vertex channel ──
-          child.material = new THREE.ShaderMaterial({
-            vertexColors: true,
-            side: THREE.DoubleSide,
-            transparent: false,
-            vertexShader: `
-              attribute vec3 color;
-              varying float vHeat;
-              void main() {
-                vHeat = color.r; // Red channel encodes deviation 0..1
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-              }
-            `,
-            fragmentShader: `
-              varying float vHeat;
-              void main() {
-                vec3 col;
-                if (vHeat < 0.5) {
-                  col = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), vHeat * 2.0);
-                } else {
-                  col = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (vHeat - 0.5) * 2.0);
-                }
-                gl_FragColor = vec4(col, 1.0);
-              }
-            `
-          })
-        } else {
-          // ── PBR material, driven by selectedMetal from global store ──
-          const baseColor  = isClean ? metalDef.color    : 0x555555
-          const metalness  = isClean ? metalDef.metalness : 0.4
-          const roughness  = isClean ? metalDef.roughness : 0.7
-          const opacity    = isClean ? comparisonSlider : (1 - comparisonSlider)
-
-          child.material = new THREE.MeshStandardMaterial({
-            color:      baseColor,
-            metalness:  metalness,
-            roughness:  roughness,
-            transparent: true,
-            opacity:    opacity,
-            side:       THREE.DoubleSide,
-            depthWrite: false,
-          })
-        }
-      }
+    // Dispose previously assigned materials to prevent GPU leaks
+    prevMaterialsRef.current.forEach(m => {
+      if (m && m.dispose) m.dispose()
     })
-  }, [clonedScene, isClean, heatmapEnabled, comparisonSlider, selectedMetal])
+    prevMaterialsRef.current = []
+
+    // ── Decoupled Visibility Logic ──
+    // slider === 0  → only raw visible (clean hidden)
+    // slider === 1  → only clean visible (raw hidden)
+    // 0 < slider < 1 → both visible with cross-fade opacity
+    const isVisible = isClean
+      ? comparisonSlider > 0       // cleanMesh visible when slider > 0
+      : comparisonSlider < 1       // rawMesh visible when slider < 1
+
+    const opacity = isClean
+      ? comparisonSlider
+      : (1.0 - comparisonSlider)
+
+    clonedScene.visible = isVisible
+
+    // Debug: verify heatmapIntensity reaches the Viewer
+    if (isClean && heatmapEnabled) {
+      console.log('[Viewer] intensity:', heatmapIntensity)
+    }
+
+    clonedScene.traverse((child) => {
+      if (!child.isMesh) return
+
+      if (!child.geometry.attributes.normal) {
+        child.geometry.computeVertexNormals()
+      }
+
+      let newMaterial
+
+      if (heatmapEnabled && isClean) {
+        // ── Heatmap Shader ──
+        const metalColor = new THREE.Color(metalDef.color)
+
+        newMaterial = new THREE.ShaderMaterial({
+          vertexColors: true,
+          side: THREE.DoubleSide,
+          transparent: true,
+          depthWrite: opacity > 0.99,
+          wireframe: showTopology,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          uniforms: {
+            opacity:          { value: opacity },
+            heatmapIntensity: { value: heatmapIntensity },
+            baseMetalColor:   { value: new THREE.Vector3(metalColor.r, metalColor.g, metalColor.b) }
+          },
+          vertexShader: `
+            attribute vec3 color;
+            varying float vHeat;
+            void main() {
+              vHeat = color.r; // Red channel encodes deviation 0..1
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform float opacity;
+            uniform float heatmapIntensity;
+            uniform vec3  baseMetalColor;
+            varying float vHeat;
+            void main() {
+              // Heatmap gradient: Blue(cold) → Green → Red(hot)
+              vec3 heatmapColor;
+              if (vHeat < 0.5) {
+                heatmapColor = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), vHeat * 2.0);
+              } else {
+                heatmapColor = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (vHeat - 0.5) * 2.0);
+              }
+              // intensity=0 → pure metal, intensity=1 → full heatmap. Alpha from opacity.
+              gl_FragColor = mix(vec4(baseMetalColor, opacity), vec4(heatmapColor, opacity), heatmapIntensity);
+            }
+          `
+        })
+      } else {
+        // ── PBR material ──
+        const baseColor = isClean ? metalDef.color     : 0x555555
+        const metalness = isClean ? metalDef.metalness  : 0.4
+        const roughness = isClean ? metalDef.roughness  : 0.7
+
+        newMaterial = new THREE.MeshStandardMaterial({
+          color:       baseColor,
+          metalness:   metalness,
+          roughness:   roughness,
+          transparent: true,
+          opacity:     opacity,
+          wireframe:   showTopology,
+          side:        THREE.DoubleSide,
+          depthWrite:  opacity > 0.99,
+          // Z-fighting prevention for cleanMesh: render slightly in front of rawMesh
+          ...(isClean && {
+            polygonOffset:       true,
+            polygonOffsetFactor: -1,
+          }),
+        })
+      }
+
+      child.material = newMaterial
+      prevMaterialsRef.current.push(newMaterial)
+    })
+  }, [clonedScene, isClean, heatmapEnabled, heatmapIntensity, comparisonSlider, selectedMetal, showTopology])
 
   return <primitive object={clonedScene} />
 }
 
 export default function Viewer() {
   const { analytics, setStatus, setJobId, reset, setErrorMessage } = useStore()
+  const autoRotate = useStore(state => state.autoRotate)
+  const heatmapEnabled = useStore(state => state.heatmapEnabled)
   const isCompleted = analytics && analytics.length > 0
   const [isDragging, setIsDragging] = useState(false)
 
@@ -143,20 +206,24 @@ export default function Viewer() {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <Canvas shadows camera={{ position: [0, 0, 50], fov: 45 }}>
-        <color attach="background" args={['#0a0a0a']} />
-        <Suspense fallback={null}>
-          <Stage environment="apartment" intensity={0.6}>
+      <ErrorBoundary>
+        <Canvas shadows camera={{ position: [0, 0, 50], fov: 45 }}>
+          <color attach="background" args={['#0a0a0a']} />
+          <Suspense fallback={null}>
             {isCompleted && cleanModelUrl && (
-              <group>
-                <Model url={cleanModelUrl} isClean={true}  />
-                <Model url={rawModelUrl}   isClean={false} />
-              </group>
+              <Stage environment="apartment" intensity={0.6}>
+                <group>
+                  {/* Raw mesh renders first (behind) */}
+                  <Model key={`raw-${heatmapEnabled}`}   url={rawModelUrl}   isClean={false} />
+                  {/* Clean mesh renders second — key forces shader re-init on heatmap toggle */}
+                  <Model key={`clean-${heatmapEnabled}`} url={cleanModelUrl} isClean={true}  />
+                </group>
+              </Stage>
             )}
-          </Stage>
-        </Suspense>
-        <OrbitControls makeDefault autoRotate autoRotateSpeed={1} />
-      </Canvas>
+          </Suspense>
+          <OrbitControls makeDefault autoRotate={autoRotate} autoRotateSpeed={1.5} />
+        </Canvas>
+      </ErrorBoundary>
 
       {isDragging && (
         <div className="absolute inset-0 bg-neutral-950/80 z-50 flex items-center justify-center border-4 border-amber-500 border-dashed m-4 rounded-xl transition-all pointer-events-none">

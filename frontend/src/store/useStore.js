@@ -14,15 +14,21 @@ export const useStore = create((set) => ({
   analytics: null, // metrics from backend
   files: [],
   heatmapEnabled: false,
-  comparisonSlider: 0.5,
+  heatmapIntensity: 1.0,
+  comparisonSlider: 1.0,
+  showTopology: false,
+  autoRotate: true,
   selectedMetal: 'gold_14k',   // shared between Dashboard & Viewer
   setJobId: (id) => set({ jobId: id }),
   setStatus: (status) => set({ status }),
   setErrorMessage: (msg) => set({ errorMessage: msg }),
   setAnalytics: (data) => set({ analytics: data }),
   setHeatmapEnabled: (enabled) => set({ heatmapEnabled: enabled }),
+  setHeatmapIntensity: (val) => set({ heatmapIntensity: val }),
   setComparisonSlider: (val) => set({ comparisonSlider: val }),
+  setShowTopology: (val) => set({ showTopology: val }),
+  setAutoRotate: (val) => set({ autoRotate: val }),
   setSelectedMetal: (metal) => set({ selectedMetal: metal }),
-  reset: () => set({ jobId: null, status: 'idle', errorMessage: null, analytics: null, files: [], heatmapEnabled: false, selectedMetal: 'gold_14k', comparisonSlider: 0.5 })
+  reset: () => set({ jobId: null, status: 'idle', errorMessage: null, analytics: null, files: [], heatmapEnabled: false, heatmapIntensity: 1.0, selectedMetal: 'gold_14k', comparisonSlider: 1.0, showTopology: false, autoRotate: true })
 }))
 

@@ -142,20 +142,27 @@ class JewelryProcessor:
             hires_path = str(self.work_dir / f"{item_id}_hires.ply")
             final_hires.export(hires_path)
             
+            lod_ply_path = str(self.work_dir / f"{item_id}_lod.ply")
             lod_path = str(self.work_dir / f"{item_id}_lod.glb")
             
-            # Вторая обертка PyMeshLab для Децимации
+            # Децимация через PyMeshLab → PLY, затем Trimesh конвертит PLY → GLB
             try:
                 ms_lod = pymeshlab.MeshSet()
                 ms_lod.load_new_mesh(hires_path)
                 current_faces = ms_lod.current_mesh().face_number()
                 target_faces = min(100000, current_faces)
                 ms_lod.apply_filter('meshing_decimation_quadric_edge_collapse', targetfacenum=target_faces)
-                ms_lod.save_current_mesh(lod_path)
+                # PyMeshLab не поддерживает GLB — сохраняем в PLY
+                ms_lod.save_current_mesh(lod_ply_path)
+                # Загружаем PLY через Trimesh и экспортируем в GLB (сохраняет vertex colors)
+                lod_mesh = trimesh.load(lod_ply_path, force='mesh')
+                lod_mesh.export(lod_path)
+                if os.path.exists(lod_ply_path): os.remove(lod_ply_path)
             except Exception as e:
                 print(f"Предупреждение PyMeshLab децимации: {e}")
-                # Fallback: сохраняем High-Res вместо LOD
+                # Fallback: Trimesh экспортирует High-Res напрямую в GLB
                 final_hires.export(lod_path)
+                if os.path.exists(lod_ply_path): os.remove(lod_ply_path)
             
             # Очистка
             if os.path.exists(temp_metal_path): os.remove(temp_metal_path)

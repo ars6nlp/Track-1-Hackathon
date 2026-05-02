@@ -6,7 +6,10 @@ export default function Dashboard() {
   const fileInputRef = useRef(null)
   const {
     analytics, heatmapEnabled, setHeatmapEnabled,
+    heatmapIntensity, setHeatmapIntensity,
     comparisonSlider, setComparisonSlider,
+    showTopology, setShowTopology,
+    autoRotate, setAutoRotate,
     selectedMetal, setSelectedMetal,
     reset, setStatus, setJobId, setErrorMessage
   } = useStore()
@@ -83,6 +86,25 @@ export default function Dashboard() {
         New Scan / Reset
       </button>
 
+      {/* ── Comparison Slider ──────────────────────────────────────── */}
+      <div className="bg-neutral-800 rounded-lg p-4 space-y-2 border border-neutral-700/50 shadow-lg">
+        <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-widest flex items-center gap-2">
+          <Layers size={14} /> Comparison
+        </h3>
+        <div className="flex justify-between text-xs text-neutral-400">
+          <span className={comparisonSlider < 0.5 ? 'text-amber-500 font-medium' : ''}>Raw Scan</span>
+          <span className="text-neutral-500 tabular-nums">{Math.round(comparisonSlider * 100)}%</span>
+          <span className={comparisonSlider > 0.5 ? 'text-amber-500 font-medium' : ''}>Optimized</span>
+        </div>
+        <input
+          id="comparison-slider"
+          type="range" min="0" max="1" step="0.01"
+          value={comparisonSlider}
+          onChange={(e) => setComparisonSlider(parseFloat(e.target.value))}
+          className="w-full accent-amber-500 bg-neutral-700 h-1 rounded-lg appearance-none cursor-pointer"
+        />
+      </div>
+
       {/* ── View Controls ─────────────────────────────────────────── */}
       <div className="bg-neutral-800 rounded-lg p-4 space-y-4 border border-neutral-700/50 shadow-lg">
         <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-widest flex items-center gap-2">
@@ -99,17 +121,40 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <div className="space-y-2 pt-2 border-t border-neutral-700/50">
-          <div className="flex justify-between text-xs text-neutral-400">
-            <span>Raw Scan</span>
-            <span>Optimized</span>
+        {heatmapEnabled && (
+          <div className="space-y-1 pl-1">
+            <div className="flex justify-between text-xs text-neutral-500">
+              <span>Intensity</span>
+              <span className="tabular-nums">{Math.round(heatmapIntensity * 100)}%</span>
+            </div>
+            <input
+              id="heatmap-intensity-slider"
+              type="range" min="0" max="1" step="0.01"
+              value={heatmapIntensity}
+              onChange={(e) => setHeatmapIntensity(parseFloat(e.target.value))}
+              className="w-full accent-amber-500 bg-neutral-700 h-1 rounded-lg appearance-none cursor-pointer"
+            />
           </div>
-          <input
-            type="range" min="0" max="1" step="0.01"
-            value={comparisonSlider}
-            onChange={(e) => setComparisonSlider(parseFloat(e.target.value))}
-            className="w-full accent-amber-500 bg-neutral-700 h-1 rounded-lg appearance-none cursor-pointer"
-          />
+        )}
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm">Show Topology</label>
+          <button
+            onClick={() => setShowTopology(!showTopology)}
+            className={`w-10 h-5 rounded-full transition-colors ${showTopology ? 'bg-amber-500' : 'bg-neutral-600'} relative`}
+          >
+            <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${showTopology ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm">Auto-Spin</label>
+          <button
+            onClick={() => setAutoRotate(!autoRotate)}
+            className={`w-10 h-5 rounded-full transition-colors ${autoRotate ? 'bg-amber-500' : 'bg-neutral-600'} relative`}
+          >
+            <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${autoRotate ? 'translate-x-5' : ''}`} />
+          </button>
         </div>
       </div>
 
