@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore'
 import { UploadCloud } from 'lucide-react'
 
 export default function UploadZone() {
-  const { setStatus, setJobId } = useStore()
+  const { setStatus, setJobId, setErrorMessage } = useStore()
   const [isDragging, setIsDragging] = useState(false)
 
   const handleDrop = useCallback(async (e) => {
@@ -32,12 +32,16 @@ export default function UploadZone() {
         method: 'POST',
         body: formData,
       });
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       
       setJobId(data.job_id);
       setStatus('processing');
     } catch (err) {
       console.error(err);
+      setErrorMessage(err.message || 'Сбой сети или бэкенд недоступен.');
       setStatus('error');
     }
   };

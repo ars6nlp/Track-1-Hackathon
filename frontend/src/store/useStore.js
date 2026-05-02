@@ -10,17 +10,19 @@ export const METALS = {
 export const useStore = create((set) => ({
   jobId: null,
   status: 'idle', // idle, uploading, processing, completed, error
+  errorMessage: null,
   analytics: null, // metrics from backend
   files: [],
   heatmapEnabled: false,
-  overlayOpacity: 0.5,
+  comparisonSlider: 0.5,
   selectedMetal: 'gold_14k',   // shared between Dashboard & Viewer
   setJobId: (id) => set({ jobId: id }),
   setStatus: (status) => set({ status }),
+  setErrorMessage: (msg) => set({ errorMessage: msg }),
   setAnalytics: (data) => set({ analytics: data }),
   setHeatmapEnabled: (enabled) => set({ heatmapEnabled: enabled }),
-  setOverlayOpacity: (opacity) => set({ overlayOpacity: opacity }),
+  setComparisonSlider: (val) => set({ comparisonSlider: val }),
   setSelectedMetal: (metal) => set({ selectedMetal: metal }),
-  reset: () => set({ jobId: null, status: 'idle', analytics: null, files: [], heatmapEnabled: false, selectedMetal: 'gold_14k' })
+  reset: () => set({ jobId: null, status: 'idle', errorMessage: null, analytics: null, files: [], heatmapEnabled: false, selectedMetal: 'gold_14k', comparisonSlider: 0.5 })
 }))
 

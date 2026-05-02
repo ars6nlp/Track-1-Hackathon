@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import routes_batch
+import uvicorn
 
 app = FastAPI(
     title="Jewelry CAD Optimizer API (Elite)",
@@ -25,3 +26,6 @@ def read_root():
         "status": "ok", 
         "message": "Jewelry CAD Optimizer API (Elite) is running. Engine: PyMeshLab + Trimesh"
     }
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

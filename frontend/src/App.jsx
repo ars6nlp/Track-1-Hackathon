@@ -6,7 +6,7 @@ import Viewer from './canvas/Viewer'
 import { Settings, Layers } from 'lucide-react'
 
 export default function App() {
-  const { status, jobId, setStatus, setAnalytics } = useStore()
+  const { status, jobId, errorMessage, setStatus, setErrorMessage, setAnalytics } = useStore()
 
   // Поллинг: Опрос статуса обработки каждые 2 секунды, чтобы избежать таймаутов
   useEffect(() => {
@@ -20,6 +20,7 @@ export default function App() {
             const hasError = data.results && data.results.length > 0 && data.results[0].result.status === 'error';
             if (hasError) {
               console.error("Ошибка обработки:", data.results[0].result.error);
+              setErrorMessage(data.results[0].result.error || 'Неизвестная ошибка обработки.');
               setStatus('error');
             } else {
               setStatus('completed');
@@ -27,6 +28,7 @@ export default function App() {
             }
             clearInterval(interval);
           } else if (data.status === 'error') {
+            setErrorMessage(data.error || 'Ошибка бекенда.');
             setStatus('error');
             clearInterval(interval);
           }
@@ -73,10 +75,18 @@ export default function App() {
           )}
           
           {status === 'error' && (
-            <div className="flex flex-col items-center justify-center h-full text-red-400 mt-10 text-center">
-              <p className="mb-4">Произошла ошибка при обработке файла.</p>
+            <div className="flex flex-col items-center justify-center h-full text-red-400 mt-10 text-center px-4">
+              <p className="mb-2 font-bold">Произошла ошибка при обработке файла.</p>
+              {errorMessage && (
+                <p className="mb-6 text-xs text-red-300/80 bg-red-950/50 p-3 rounded-lg border border-red-900/50 break-words w-full">
+                  {errorMessage}
+                </p>
+              )}
               <button 
-                onClick={() => setStatus('idle')} 
+                onClick={() => {
+                  setErrorMessage(null);
+                  setStatus('idle');
+                }} 
                 className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
               >
                 Попробовать снова

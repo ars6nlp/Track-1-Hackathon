@@ -1,18 +1,49 @@
-import React from 'react'
+import React, { useRef, useCallback } from 'react'
 import { useStore, METALS } from '../store/useStore'
-import { Activity, CircleDashed, Gem, Weight, SlidersHorizontal, Layers, Box } from 'lucide-react'
+import { Activity, CircleDashed, Gem, Weight, SlidersHorizontal, Layers, Box, UploadCloud } from 'lucide-react'
 
 export default function Dashboard() {
+  const fileInputRef = useRef(null)
   const {
     analytics, heatmapEnabled, setHeatmapEnabled,
-    overlayOpacity, setOverlayOpacity,
-    selectedMetal, setSelectedMetal
+    comparisonSlider, setComparisonSlider,
+    selectedMetal, setSelectedMetal,
+    reset, setStatus, setJobId, setErrorMessage
   } = useStore()
 
   if (!analytics || analytics.length === 0) return null
 
   const data   = analytics[0].result
   const metal  = METALS[selectedMetal]
+
+  const handleFileInput = useCallback(async (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+
+    reset()
+    setStatus('uploading')
+
+    const formData = new FormData()
+    files.forEach(file => formData.append('files', file))
+
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/jobs/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const respData = await res.json()
+
+      setJobId(respData.job_id)
+      setStatus('processing')
+    } catch (err) {
+      console.error(err)
+      setErrorMessage(err.message || 'Сбой сети или бэкенд недоступен.')
+      setStatus('error')
+    }
+  }, [reset, setStatus, setJobId, setErrorMessage])
 
   // ── Physics ──────────────────────────────────────────────────────────────
   const volume = data.volume_mm3 || data.mcp_params?.volume_mm3 || 0
@@ -35,6 +66,23 @@ export default function Dashboard() {
   return (
     <div className="space-y-4 text-neutral-300 animate-in fade-in duration-500">
 
+      {/* ── Actions ───────────────────────────────────────────────── */}
+      <input 
+        type="file" 
+        multiple 
+        accept=".stl,.obj,.ply" 
+        className="hidden" 
+        ref={fileInputRef}
+        onChange={handleFileInput} 
+      />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full bg-neutral-900 border border-amber-500/50 hover:bg-amber-500/10 text-amber-500 rounded-lg p-3 flex items-center justify-center gap-2 font-medium transition-all shadow-lg shadow-amber-500/5"
+      >
+        <UploadCloud size={18} />
+        New Scan / Reset
+      </button>
+
       {/* ── View Controls ─────────────────────────────────────────── */}
       <div className="bg-neutral-800 rounded-lg p-4 space-y-4 border border-neutral-700/50 shadow-lg">
         <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-widest flex items-center gap-2">
@@ -54,12 +102,12 @@ export default function Dashboard() {
         <div className="space-y-2 pt-2 border-t border-neutral-700/50">
           <div className="flex justify-between text-xs text-neutral-400">
             <span>Raw Scan</span>
-            <span>Clean ({metal.name})</span>
+            <span>Optimized</span>
           </div>
           <input
             type="range" min="0" max="1" step="0.01"
-            value={overlayOpacity}
-            onChange={(e) => setOverlayOpacity(parseFloat(e.target.value))}
+            value={comparisonSlider}
+            onChange={(e) => setComparisonSlider(parseFloat(e.target.value))}
             className="w-full accent-amber-500 bg-neutral-700 h-1 rounded-lg appearance-none cursor-pointer"
           />
         </div>
