@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+pymeshlab
+trimesh
+numpy
+scipy
+networkx
+shapely
